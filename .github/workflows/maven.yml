@@ -1,10 +1,6 @@
-# This workflow will build a Java project with Maven, and cache/restore any dependencies to improve the workflow execution time
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-maven
-
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
+# Laboratorio 3 - Integracion de Pruebas Automatizadas al Pipeline
+# Pipeline por etapas: Compilacion -> Pruebas + Cobertura (Quality Gate) -> Empaquetado
+# Cada etapa se ejecuta unicamente si la anterior finalizo correctamente (needs).
 
 name: Java CI with Maven
 
@@ -13,26 +9,131 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
+
+# Principio de menor privilegio: el pipeline solo necesita leer el repositorio.
+permissions:
+  contents: read
+
+env:
+  JAVA_VERSION: "25"
+  JAVA_DISTRIBUTION: "temurin"
 
 jobs:
-  build:
 
+  # ETAPA 1 -------------------------------------------------------------------
+  compilacion:
+    name: 1. Compilacion
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: write
+    steps:
+      - name: Descargar el codigo fuente
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          cache: maven
+
+      - name: Compilar la aplicacion
+        run: mvn -B clean compile --file pom.xml
+
+  # ETAPA 2 -------------------------------------------------------------------
+  # Solo se ejecuta si la compilacion fue exitosa (needs: compilacion).
+  pruebas:
+    name: 2. Pruebas unitarias y cobertura
+    needs: compilacion
+    runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up JDK 25
-      uses: actions/setup-java@v4
-      with:
-        java-version: '25'
-        distribution: 'temurin'
-        cache: maven
-    - name: Build with Maven
-      run: mvn -B package --file pom.xml
+      - name: Descargar el codigo fuente
+        uses: actions/checkout@v4
 
-    # Optional: Uploads the full dependency graph to GitHub to improve the quality of Dependabot alerts this repository can receive
-#    - name: Update dependency graph
-#      uses: advanced-security/maven-dependency-submission-action@571e99aab1055c2e71a1e2309b9691de18d6b7d6
+      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          cache: maven
+
+      # QUALITY GATE: "mvn verify" ejecuta las pruebas unitarias (surefire),
+      # genera el reporte de cobertura (jacoco:report) y valida el umbral minimo
+      # de cobertura (jacoco:check). Si una prueba falla o la cobertura es
+      # insuficiente, este job falla y las etapas siguientes no se ejecutan.
+      - name: Ejecutar pruebas unitarias y validar cobertura (Quality Gate)
+        run: mvn -B verify --file pom.xml
+
+      - name: Mostrar resultado de las pruebas en el log
+        if: always()
+        run: |
+          echo "=================== RESULTADO DE LAS PRUEBAS ==================="
+          if [ -d target/surefire-reports ]; then
+            for archivo in target/surefire-reports/*.txt; do
+              echo "--- $archivo"
+              cat "$archivo"
+            done
+          else
+            echo "No se generaron reportes de pruebas."
+          fi
+
+      - name: Publicar resumen de pruebas y cobertura
+        if: always()
+        run: python3 .github/scripts/resumen_pruebas.py >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publicar reporte de ejecucion de pruebas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-pruebas-unitarias
+          path: target/surefire-reports/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Publicar reporte de cobertura de codigo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-cobertura-jacoco
+          path: |
+            target/site/jacoco/
+            target/jacoco.exec
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ETAPA 3 -------------------------------------------------------------------
+  # Solo se ejecuta si las pruebas y el Quality Gate fueron superados.
+  empaquetado:
+    name: 3. Empaquetado
+    needs: pruebas
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar el codigo fuente
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          cache: maven
+
+      # Se omiten las pruebas porque ya fueron ejecutadas y validadas en la etapa 2.
+      - name: Empaquetar la aplicacion
+        run: mvn -B -DskipTests package --file pom.xml
+
+      - name: Publicar el artefacto ejecutable (JAR)
+        uses: actions/upload-artifact@v4
+        with:
+          name: aplicacion-jar
+          path: target/*.jar
+          if-no-files-found: error
+          retention-days: 30
+
+    # Opcional: envia el grafo de dependencias a GitHub para mejorar las alertas
+    # de Dependabot. Deshabilitado porque la API responde HTTP 403 cuando el
+    # repositorio no tiene habilitado el Dependency graph.
+    #  - name: Update dependency graph
+    #    uses: advanced-security/maven-dependency-submission-action@571e99aab1055c2e71a1e2309b9691de18d6b7d6
