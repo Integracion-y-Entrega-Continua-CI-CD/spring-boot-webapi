@@ -12,12 +12,29 @@ public class WebapiApplication {
 		SpringApplication.run(WebapiApplication.class, args);
 	}
 
-	@RestController
-	class HelloController {
-		@GetMapping("/")
-		public String hello() {
-			return "Hello, World!";
-		}
-	}
+}
 
+
+@RestController
+class HelloController {
+	@GetMapping("/")
+	public String hello() {
+		return "Hello, World!";
+	}
+}
+
+@RestController
+class HealthController {
+	@GetMapping("/health")
+	public String health() {
+		return "Server Healthy!";
+	}
+}
+
+@RestController
+class DateController {
+	@GetMapping("/date")
+	public String date() {
+		return "Current Server Date: " + java.time.LocalDate.now();
+	}
 }
