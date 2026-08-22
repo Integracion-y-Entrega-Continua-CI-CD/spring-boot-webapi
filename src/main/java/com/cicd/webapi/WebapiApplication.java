@@ -19,7 +19,7 @@ public class WebapiApplication {
 class HelloController {
 	@GetMapping("/")
 	public String hello() {
-		return "Servidor OK";
+		return "Hello, World!";
 	}
 }
 
