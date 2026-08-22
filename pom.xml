@@ -40,17 +40,28 @@
 
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-webmvc</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+
+		<!-- En Spring Boot 4 el slice de pruebas de Spring MVC (@AutoConfigureMockMvc,
+		     @WebMvcTest) se movio fuera de spring-boot-starter-test a su propio
+		     modulo, por lo que debe declararse de forma explicita. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-webmvc-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-devtools</artifactId>
 			<scope>runtime</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
 	</dependencies>
 
@@ -61,54 +72,51 @@
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>
 
-			<!-- Reporte de ejecucion de pruebas unitarias (XML + TXT en target/surefire-reports) -->
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-surefire-plugin</artifactId>
-				<configuration>
-					<printSummary>true</printSummary>
-				</configuration>
-			</plugin>
-
-			<!-- Cobertura de codigo y Quality Gate de cobertura -->
+			<!-- Jacoco Plugin -->
 			<plugin>
 				<groupId>org.jacoco</groupId>
 				<artifactId>jacoco-maven-plugin</artifactId>
 				<version>${jacoco.version}</version>
+
+				<!-- Quality Gate: la regla se declara a nivel de plugin para que aplique
+				     tanto en la fase verify como al invocar jacoco:check directamente
+				     desde el pipeline. -->
+				<configuration>
+					<rules>
+						<rule>
+							<element>BUNDLE</element>
+							<limits>
+								<limit>
+									<counter>LINE</counter>
+									<value>COVEREDRATIO</value>
+									<minimum>${jacoco.line.coverage.minimum}</minimum>
+								</limit>
+							</limits>
+						</rule>
+					</rules>
+				</configuration>
+
 				<executions>
 					<execution>
-						<id>jacoco-prepare-agent</id>
 						<goals>
 							<goal>prepare-agent</goal>
 						</goals>
 					</execution>
+
 					<execution>
-						<id>jacoco-report</id>
-						<phase>test</phase>
+						<id>report</id>
+						<phase>verify</phase>
 						<goals>
 							<goal>report</goal>
 						</goals>
 					</execution>
+
 					<execution>
-						<id>jacoco-quality-gate</id>
+						<id>check</id>
 						<phase>verify</phase>
 						<goals>
 							<goal>check</goal>
 						</goals>
-						<configuration>
-							<rules>
-								<rule>
-									<element>BUNDLE</element>
-									<limits>
-										<limit>
-											<counter>LINE</counter>
-											<value>COVEREDRATIO</value>
-											<minimum>${jacoco.line.coverage.minimum}</minimum>
-										</limit>
-									</limits>
-								</rule>
-							</rules>
-						</configuration>
 					</execution>
 				</executions>
 			</plugin>
