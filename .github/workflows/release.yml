@@ -1,0 +1,107 @@
+# Laboratorio 3 - Generacion y publicacion de artefactos
+#
+# Pipeline de release: a diferencia de maven.yml y maven-prod-main.yml, este
+# workflow no se dispara con cada push, sino unicamente cuando se etiqueta una
+# version. Compila, valida el Quality Gate y publica el JAR ejecutable como un
+# GitHub Release descargable.
+#
+#   git tag v1.0.0
+#   git push origin v1.0.0
+#
+# El tag es la fuente de la verdad de la version: v1.0.0 produce el artefacto
+# webapi-1.0.0.jar y el release "Release v1.0.0".
+
+name: Build and Release
+
+on:
+  # Se dispara al publicar un tag de version (v1.0.0, v2.3.1, ...).
+  push:
+    tags:
+      - 'v*'
+
+  # Ejecucion manual desde la pestana Actions, indicando la version a mano.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version a publicar, sin la v (ejemplo: 1.0.0)'
+        required: true
+
+# Permiso necesario para que la action pueda crear el release y subir el JAR.
+permissions:
+  contents: write
+
+jobs:
+
+  build-and-release:
+    name: Compilar y publicar el release
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up JDK 25
+      uses: actions/setup-java@v4
+      with:
+        java-version: '25'
+        distribution: 'temurin'
+        cache: maven
+
+    # Determina la version segun como se disparo el workflow: la entrada del
+    # dispatch si es manual, o el nombre del tag sin la "v" si fue por push.
+    # El valor se pasa por env y no se interpola dentro del script, para que un
+    # texto con caracteres raros no se ejecute como comando.
+    - name: Determinar la version
+      id: version
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+      run: |
+        VERSION="${INPUT_VERSION:-${GITHUB_REF_NAME#v}}"
+
+        if [ -z "$VERSION" ]; then
+          echo "::error::No se pudo determinar la version a publicar."
+          exit 1
+        fi
+
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+        echo "Publicando la version $VERSION"
+
+    # Alinea la version del pom con la del tag, para que el artefacto se llame
+    # webapi-1.0.0.jar y no webapi-0.0.1-SNAPSHOT.jar. El cambio vive solo en el
+    # runner: no se commitea nada al repositorio.
+    - name: Fijar la version en el pom
+      run: >
+        mvn -B org.codehaus.mojo:versions-maven-plugin:2.18.0:set
+        -DnewVersion=${{ steps.version.outputs.version }}
+        -DgenerateBackupPoms=false
+        --file pom.xml
+
+    # "verify" ejecuta las pruebas y ademas jacoco:report y jacoco:check, por lo
+    # que el Quality Gate tambien protege la publicacion: si la cobertura cae por
+    # debajo del umbral, el release no se genera.
+    - name: Compilar, probar y validar el Quality Gate
+      run: mvn -B clean verify --file pom.xml
+
+    # spring-boot-maven-plugin deja dos archivos en target/: el JAR ejecutable y
+    # el original sin las dependencias empaquetadas. Se publica solo el primero.
+    - name: Localizar el JAR
+      id: jar
+      run: |
+        JAR_FILE=$(find target -maxdepth 1 -name "*.jar" ! -name "*original*" | head -n 1)
+
+        if [ -z "$JAR_FILE" ]; then
+          echo "::error::No se encontro el JAR en target/."
+          exit 1
+        fi
+
+        echo "file=$JAR_FILE" >> "$GITHUB_OUTPUT"
+        echo "JAR a publicar: $JAR_FILE"
+
+    - name: Crear el GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.version.outputs.tag }}
+        name: Release ${{ steps.version.outputs.tag }}
+        generate_release_notes: true
+        files: ${{ steps.jar.outputs.file }}
