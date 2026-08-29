@@ -12,16 +12,18 @@
 #
 #   1. Compilacion  ->  2. Pruebas y cobertura  ->  3. Empaquetado
 #
-# Alcance: ramas de trabajo. La validacion de main (PR y post-merge) es
-# responsabilidad de maven-prod-main.yml, para no ejecutar el mismo commit
-# mas veces de las necesarias.
+# Alcance: guardian de main. Valida el PR antes del merge (pull_request) y
+# revalida el resultado real del merge (push a main). Las ramas de trabajo
+# las cubre maven.yml.
 
-name: Java CI with Maven (Feature)
+name: Java CI with Maven (Main / Prod)
 
 on:
   push:
     branches:
-      - "feature/**"
+      - main
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
 
