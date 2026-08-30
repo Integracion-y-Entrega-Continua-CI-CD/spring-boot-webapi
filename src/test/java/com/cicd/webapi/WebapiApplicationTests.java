@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.mockito.Mockito.mockStatic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -64,6 +65,15 @@ class WebapiApplicationTests {
 			.andExpect(status().isOk())
 			.andExpect(content().string("Current Server Date: " + java.time.LocalDate.now()));
 			//.andExpect(content().string("Current Server Date Time : " + java.time.LocalDateTime.now()));
+	}
+
+	@Test
+	void checkInstanceResponse() throws Exception {
+		MockMvc.perform(get("/instance")
+				.accept(MediaType.APPLICATION_JSON))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.instance").value("unknown"))
+			.andExpect(jsonPath("$.port").value("8080"));
 	}
 
 }
