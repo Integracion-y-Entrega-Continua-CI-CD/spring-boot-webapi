@@ -103,8 +103,9 @@ stop_app() {
 start_app() {
   log "Iniciando $APP_NAME en el puerto $PORT (perfil $SPRING_PROFILE)."
 
+  # APP_INSTANCE etiqueta la instancia y la devuelve el endpoint /instance.
   # shellcheck disable=SC2086
-  nohup java $JAVA_OPTS \
+  APP_INSTANCE="$APP_NAME" nohup java $JAVA_OPTS \
     -jar "$JAR_PATH" \
     --spring.profiles.active="$SPRING_PROFILE" \
     --server.port="$PORT" \
